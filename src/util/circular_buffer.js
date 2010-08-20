@@ -1,6 +1,7 @@
-var EXPORTED_SYMBOLS = ["swift_utils"]
-
-function swift_utils() {
-	return "swift_utils";
+function CircularBuffer() {
+	this.text = "circular buffer";
 }
+
+
+module.exports = CircularBuffer
 

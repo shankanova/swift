@@ -1,3 +1,5 @@
+#!/usr/local/bin/node
+
 var sys = require("sys"),
     http = require("http"),
     url = require("url"),
@@ -5,8 +7,12 @@ var sys = require("sys"),
     fs = require("fs");
     circular_buffer = require("../util/circular_buffer");
 
+
+circularBuffer = new circular_buffer.CircularBuffer;
+
 http.createServer(function(request, response) {
     var uri = url.parse(request.url).pathname;
+    
     var filename = path.join(process.cwd(), uri);
     path.exists(filename, function(exists) {
     	if(!exists) {
