@@ -9,7 +9,7 @@ function CacheManager() {
 CacheManager.prototype.get = 
 	function(id, callback) {
 		var offset_map = this.cacheIndex.get(id);
-		if (offset_map.offset>0) {
+		if (offset_map && offset_map.offset>0) {
 			this.circularCacheFile.get(offset_map.offset, "sig", 
 				function(error, metadata, body) {
 					if (error) { 
