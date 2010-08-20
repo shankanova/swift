@@ -1,3 +1,5 @@
 To run the examples
 ------------------
-1. node hello_world.js
+1. node hello_world.js , hit http://localhost:8080
+
+2. node static_file_server.js, hit http://localhost:8080/static_file_server.js
