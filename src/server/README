@@ -3,3 +3,13 @@ How to run
 
 node proxy_server.js
 
+
+REST API
+--------
+
+/get/resource-id
+/invalidate/resource-id
+/put/resource-id
+meta-data = [xyz]
+body = [resource binary]
+
