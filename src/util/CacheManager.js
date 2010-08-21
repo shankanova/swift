@@ -1,4 +1,5 @@
-var CacheIndex = require('./CacheIndex'),
+var sys = require('sys'),
+    CacheIndex = require('./CacheIndex'),
     CircularCacheFile = require('./circularCacheFile');
 
 function CacheManager() {
@@ -11,9 +12,9 @@ function CacheManager() {
 CacheManager.prototype.get = 
 	function(id, callback) {
 		var offset_map = this.cacheIndex.get(id);
-		if (offset_map && offset_map.offset>0) {
+		if (offset_map && offset_map.offset>=0) {
 			console.log("Cache index offset is " + offset_map.offset);
-			this.circularCacheFile.get(offset_map.offset, "sig", 
+			this.circularCacheFile.get(offset_map.offset, id,
 				function(error, metadata, body) {
 					if (error) { 
 						console.log('CacheManager error: ' + error);
@@ -34,19 +35,20 @@ CacheManager.prototype.get =
 	}
 
 CacheManager.prototype.put = 
-	function(key, content) { 
+	function(key, metadata, body) {
 		console.log("CacheManager put called");
 		var userData = 0;
-        var that = this;
+    var that = this;
 		console.log("CacheFile put being called on " + this.circularCacheFile);
-		this.circularCacheFile.put(this.offset, key, "", content, 
+		this.circularCacheFile.put(this.offset, key, metadata, body, 
 			function(error, newOffset) {
 				if (error) { 
 					console.log("Error in writing to cache file. " + error) 
 				}
 				else {
-					that.offset = newOffset;
+sys.puts("put offset=" + that.offset);
 					that.cacheIndex.put(key, that.offset, userData);
+					that.offset = newOffset;
 					console.log("CacheIndex put worked!");
 				}
 			}

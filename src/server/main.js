@@ -52,7 +52,7 @@ function testCircularCacheFile(fileName, maxSize, numEntries, metaDataSize, data
                 return;
             }
             var sig = crypto.createHash('md5').update(index).digest('binary');
-            myCacheFile.getData(offsets[index], sig, function(err, metaData, data) 
+            myCacheFile.get(offsets[index], sig, function(err, metaData, data) 
                 {
                      // sys.puts("index=" + index + ", err=" + err + ", metaData=" + metaData + ", data=" + data);
                      if (bytesRead + entrySize < maxSize) { 

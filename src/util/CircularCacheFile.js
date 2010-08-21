@@ -46,8 +46,12 @@ function getBuffer(fd, length, position, callback)
     var buffer = new Buffer(length);
     read(fd, buffer, 0, length, position, function(err, bytesRead)
         {
+            if (err) {
+                callback(err, null);
+                return;
+            }
             assert.equal(bytesRead, buffer.length);
-            callback(err, err ? null : buffer);
+            callback(null, buffer);
         });
 }
 
@@ -132,8 +136,12 @@ function putBuffer(fd, buffer, position, callback)
 
     write(fd, buffer, 0, buffer.length, position, function(err, written)
         {
+            if (err) {
+                callback(err, null);
+                return;
+            }
             assert.equal(written, buffer.length);
-            callback(err, err ? null : position + written);
+            callback(null, position + written);
         });
 }
 
@@ -224,6 +232,10 @@ CircularCacheFile.prototype.getTrailerLength = function(sig)
 
 CircularCacheFile.prototype.put = function(position, sig, metaData, data, callback) 
 {
+    if (metaData == null) {
+        metaData = new Buffer(0);
+    }
+
     assert.ok(typeof position, 'number');
     assert.equal(typeof sig, 'string');
     assert.ok(metaData instanceof Buffer);
@@ -350,7 +362,7 @@ CircularCacheFile.prototype.getMetadata = function(position, sig, callback)
         });
 }
 
-CircularCacheFile.prototype.getData = function(position, sig, callback) 
+CircularCacheFile.prototype.get = function(position, sig, callback) 
 {
     assert.equal(typeof position, 'number');
     assert.equal(typeof sig, 'string');

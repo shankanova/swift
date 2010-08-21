@@ -4,6 +4,8 @@ var fs   = require('fs');
 var CacheManager = require('../util/CacheManager');
 var CacheUtils = require('../util/CacheUtils');
 
+eval(fs.readFileSync('../lib/json2.js'));
+
 var blacklist = [];
 var iplist    = ["127.0.0.1"];
 
@@ -76,6 +78,7 @@ http.createServer(function(request, response) {
   }
 */
   sys.log(ip + ": " + request.method + " " + request.url);
+sys.puts(sys.inspect(request.headers));
   try {
   var proxy = http.createClient(80, request.headers['host']);
   var cacheKey = CacheUtils.computeCacheKey(request);
@@ -83,12 +86,15 @@ http.createServer(function(request, response) {
   cacheManager.get(cacheKey, 
 	function (found, metadata, body) {
 		  if (found) { 
+      var meta = JSON.parse(metadata.toString('utf8'));
+sys.puts(sys.inspect(meta));
+      response.writeHead(meta.statusCode, meta.header);
 			response.write(body, 'binary');
 			response.end();
 		  }
 		  else {
   		  var proxy_request = proxy.request(request.method, request.url, request.headers);
-		  var currentBufferCapacity = 1000000; // 10Kb ?
+		  var currentBufferCapacity = 1000000; // 1MB ?
 		  var buffer = new Buffer(currentBufferCapacity);
 		  var contentLength = 0;
 		  proxy_request.addListener('response', function(proxy_response) {
@@ -111,8 +117,14 @@ http.createServer(function(request, response) {
 							//console.log('buffer length = ' + contentLength);
 			});
 			proxy_response.addListener('end', function() {
+        var meta = { 
+            'statusCode' : proxy_response.statusCode,
+            'header' : proxy_response.headers
+        }; 
+sys.puts(sys.inspect(meta));
+        var metaJSON = JSON.stringify(meta);
 			  response.end();
-			  cacheManager.put(cacheKey, buffer);
+			  cacheManager.put(cacheKey, new Buffer(metaJSON, 'utf8'), buffer.slice(0, contentLength));
 			});
 			response.writeHead(proxy_response.statusCode, proxy_response.headers);
 		  });
@@ -138,6 +150,10 @@ http.createServer(function(request, response) {
 update_blacklist();
 update_iplist();
 
+sys.puts(sys.inspect(JSON));
+
+/*
 process.on('uncaughtException', function (err) {
   console.log('Caught fatal exception: ' + err);
 });
+*/
