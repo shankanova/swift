@@ -35,6 +35,11 @@ function getBuffer(fd, length, position, callback)
 
 function getBufferWithWrap(fd, maxSize, length, position, callback)
 {
+    if (length > maxSize) {
+        callback("length > maxSize", null);
+        return;
+    }
+    position = position % maxSize;
     var endPosition = position + length;
     if (endPosition <= maxSize) {
         getBuffer(fd, length, position, callback); 
@@ -91,7 +96,13 @@ function putBuffer(fd, buffer, position, callback)
 
 function putBufferWithWrap(fd, maxSize, buffer, position, callback)
 {
-    var endPosition = position + buffer.length;
+    var length = buffer.length;
+    if (length > maxSize) {
+        callback("length > maxSize", null);
+        return;
+    }
+    position = position % maxSize;
+    var endPosition = position + length;
     if (endPosition <= maxSize) {
         putBuffer(fd, buffer, position, callback);
         return;
@@ -105,7 +116,7 @@ function putBufferWithWrap(fd, maxSize, buffer, position, callback)
             else {
                 left--;
                 if (left == 0) {
-                    callback(null, (position + buffer.length) % maxSize);
+                    callback(null, (position + length) % maxSize);
                 }
             }
         };
