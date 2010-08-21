@@ -46,6 +46,7 @@ function getBuffer(fd, length, position, callback)
     var buffer = new Buffer(length);
     read(fd, buffer, 0, length, position, function(err, bytesRead)
         {
+            assert.equal(bytesRead, buffer.length);
             callback(err, err ? null : buffer);
         });
 }
@@ -68,6 +69,7 @@ function getBufferWithWrap(fd, maxSize, length, position, callback)
         return;
     }
     var left = 2;
+    var totalBytes = 0;
     var buffer = new Buffer(length);
     var countDown = function(err, bytesRead)
         {
@@ -76,8 +78,10 @@ function getBufferWithWrap(fd, maxSize, length, position, callback)
             }
             else {
                 left--;
+                totalBytes += bytesRead;
                 if (left == 0) {
                     callback(null, buffer);
+                    assert.equal(totalBytes, length);
                 }                
             }
         };
@@ -128,7 +132,8 @@ function putBuffer(fd, buffer, position, callback)
 
     write(fd, buffer, 0, buffer.length, position, function(err, written)
         {
-             callback(err, err ? null : position + written);
+            assert.equal(written, buffer.length);
+            callback(err, err ? null : position + written);
         });
 }
 
@@ -151,6 +156,7 @@ function putBufferWithWrap(fd, maxSize, buffer, position, callback)
         return;
     }
     var left = 2;
+    var totalBytes = 0;
     var countDown = function(err, wrote) 
         {
             if (err) { 
@@ -158,7 +164,9 @@ function putBufferWithWrap(fd, maxSize, buffer, position, callback)
             }
             else {
                 left--;
+                totalBytes += wrote;
                 if (left == 0) {
+                    assert.equal(totalBytes, buffer.length);
                     callback(null, (position + length) % maxSize);
                 }
             }
@@ -184,7 +192,6 @@ function CircularCacheFile(fileName, maxSize, truncate)
     this.fd = fs.openSync(fileName, flags, 0644);
 }
 
-CircularCacheFile.hashLength = 16;
 CircularCacheFile.version = 1;
 
 CircularCacheFile.prototype.getHeaderLength = function(sig)
@@ -192,7 +199,7 @@ CircularCacheFile.prototype.getHeaderLength = function(sig)
     assert.equal(typeof sig, 'string');
 
     var numberLength = BufferStream.numberLength;
-    var hashLength = CircularCacheFile.hashLength;
+    var hashLength = BufferStream.hashLength;
     var magic = this.magic;
     var headerLength = 
         magic.length +      // magic
@@ -211,9 +218,8 @@ CircularCacheFile.prototype.getHeaderLength = function(sig)
 CircularCacheFile.prototype.getTrailerLength = function(sig)
 {
     assert.equal(typeof sig, 'string');
-
-    var numberLength = BufferStream.numberLength;
-    return numberLength;
+        
+    return this.getHeaderLength(sig);
 }
 
 CircularCacheFile.prototype.put = function(position, sig, metaData, data, callback) 
@@ -244,7 +250,9 @@ CircularCacheFile.prototype.put = function(position, sig, metaData, data, callba
     bufferStream.encodeFixed(this.magic);
     bufferStream.encodeBuffer(metaData);
     bufferStream.encodeBuffer(data);
-    bufferStream.encodeFixed(this.magic);
+    bufferStream.encodeBuffer(buffer, 0, trailerLength);
+
+    assert.equal(bufferLength, bufferStream.getOffset());
 
     putBufferWithWrap(this.fd, this.maxSize, buffer, position, callback);
 } 
@@ -260,28 +268,29 @@ CircularCacheFile.prototype.getHeader = function(position, sig, callback)
     getBufferWithWrap(this.fd, this.maxSize, headerLength, position, function(err, headerBuffer)
         {
             if (err) {
-                callback(err, null);
+                callback(err, null, null);
                 return;
             }
+
             var bufferStream = new BufferStream(headerBuffer, 0);
             var magic1 = bufferStream.decodeFixed(magic.length);
             if (magic1 != magic) {
-                callback("Header 1st magic incorrect", null);
+                callback("Header 1st magic incorrect", null, null);
                 return;
             }
             var version = bufferStream.decodeNumber();
             if (version != CircularCacheFile.version) {
-                callback("Version incorrect", null);
+                callback("Version incorrect", null, null);
                 return;
             }
             var headerLength = bufferStream.decodeNumber();
             if (headerLength != headerBuffer.length) {
-                callback("Header length incorrect", null);
+                callback("Header length incorrect", null, null);
                 return;
             }
             var headerSig = bufferStream.decodeString();
             if (headerSig != sig) {
-                callback("Header sig does not match expected sig", null);
+                callback("Header sig does not match expected sig", null, null);
                 return;
             }
             var metaDataLength = bufferStream.decodeNumber();
@@ -292,9 +301,12 @@ CircularCacheFile.prototype.getHeader = function(position, sig, callback)
             var dataPosition = position + headerLength + metaDataLength;
             var magic2 = bufferStream.decodeFixed(magic.length);
             if (magic2 != magic) {
-                callback("Header 2nd magic incorrect", null);
+                callback("Header 2nd magic incorrect", null, null);
                 return;
             }
+ 
+            assert.equal(headerBuffer.length, bufferStream.getOffset());
+
             callback(null, 
                 { 
                     "version" : version,
@@ -304,7 +316,8 @@ CircularCacheFile.prototype.getHeader = function(position, sig, callback)
                     "dataLength" : dataLength, 
                     "dataHash" : dataHash,
                     "dataPosition" : dataPosition
-                });
+                },
+                headerBuffer);
         });
 };
     
@@ -315,7 +328,7 @@ CircularCacheFile.prototype.getMetadata = function(position, sig, callback)
 
     var fd = this.fd;
     var maxSize = this.maxSize;
-    this.getHeader(position, sig, function(err, header) 
+    this.getHeader(position, sig, function(err, header, headerBuffer) 
         {
             if (err) {
                 callback(err, null);
@@ -344,17 +357,22 @@ CircularCacheFile.prototype.getData = function(position, sig, callback)
 
     var fd = this.fd;
     var maxSize = this.maxSize;
-    this.getHeader(position, sig, function(err, header) 
+    this.getHeader(position, sig, function(err, header, headerBuffer) 
         {
             if (err) {
                 callback(err, null, null);
                 return;
             }
-            var bufferLength = header.metaDataLength + header.dataLength;
+            var bufferLength = header.metaDataLength + header.dataLength + headerBuffer.length;
             getBufferWithWrap(fd, maxSize, bufferLength, header.metaDataPosition, function(err, buffer)
                 {
                     if (err) {
                         callback(err, null, null);
+                        return;
+                    }
+                    var trailerBuffer = buffer.slice(header.metaDataLength + header.dataLength, bufferLength);
+                    if (headerBuffer.toString('binary') != trailerBuffer.toString('binary')) {
+                        callback("Trailer is incorrect", null, null);
                         return;
                     }
                     var metaDataBuffer = buffer.slice(0, header.metaDataLength);
@@ -362,7 +380,7 @@ CircularCacheFile.prototype.getData = function(position, sig, callback)
                         callback("Metadata hash is incorrect", null, null);
                         return;
                     }
-                    var dataBuffer = buffer.slice(header.metaDataLength, bufferLength);
+                    var dataBuffer = buffer.slice(header.metaDataLength, header.metaDataLength + header.dataLength);
                     if (BufferStream.computeHash(dataBuffer) != header.dataHash) {
                         callback("Data hash is incorrect", null, null);
                         return;

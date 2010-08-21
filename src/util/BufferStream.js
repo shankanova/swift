@@ -5,15 +5,26 @@ var sys = require('sys'),
    
 function BufferStream(buffer, offset) 
 {
+    assert.ok(buffer instanceof Buffer);
+    assert.equal(typeof offset, 'number');
+
     this.buffer = buffer;
     this.offset = offset;
 }
 
 BufferStream.numberLength = 4;
+BufferStream.hashLength = 16;
 
 BufferStream.computeHash = function(buffer)
 {
-    return crypto.createHash('md5').update(buffer).digest('binary');
+    assert.ok(buffer instanceof Buffer);
+
+    var hash = crypto.createHash('md5').update(buffer).digest('binary');
+
+    assert.equal(typeof hash, 'string');
+    assert.equal(hash.length, BufferStream.hashLength);
+
+    return hash;
 }
 
 BufferStream.prototype.encodeNumber = function(number)
@@ -51,9 +62,11 @@ BufferStream.prototype.decodeString = function()
 
 BufferStream.prototype.encodeString = function(s)
 {
-    this.encodeNumber(s.length);
-    this.buffer.write(s, this.offset, 'binary');
-    this.offset += s.length;
+    this.offset += BufferStream.numberLength;
+    var written = this.buffer.write(s, this.offset, 'binary');
+    this.offset -= BufferStream.numberLength;
+    this.encodeNumber(written);
+    this.offset += written;
 }
 
 BufferStream.prototype.decodeFixed = function(size)
@@ -75,7 +88,7 @@ BufferStream.prototype.encodeFixed = function(fixed)
 
 BufferStream.prototype.decodeHash = function()
 {
-    return this.decodeFixed(CircularCacheFile.hashLength);
+    return this.decodeFixed(BufferStream.hashLength);
 }
 
 BufferStream.prototype.encodeHashOfBuffer = function(buffer)
@@ -89,18 +102,23 @@ BufferStream.prototype.decodeBuffer = function(size)
 {
     assert.equal(typeof size, 'number');
 
-    var result = new Buffer(size);
-    this.buffer.copy(result, 0, this.offset, this.offset + size);
+    var result = this.buffer.slice(this.offset, this.offset + size);
     this.offset += size;
     return result;
 }
 
-BufferStream.prototype.encodeBuffer = function(buffer)
+BufferStream.prototype.encodeBuffer = function(buffer, start, end)
 {
     assert.ok(buffer instanceof Buffer);
+    if (start == null) {
+        start = 0;
+    }
+    if (end == null) {
+        end = buffer.length;
+    }
 
-    buffer.copy(this.buffer, this.offset, 0, buffer.length);
-    this.offset += buffer.length;
+    buffer.copy(this.buffer, this.offset, start, end);
+    this.offset += end - start;
 }
 
 BufferStream.prototype.getOffset = function()
