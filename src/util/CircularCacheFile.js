@@ -120,7 +120,6 @@ CircularCacheFile.prototype.put = function(offset, sig, metaData, data, callback
     var numberLength = BufferStream.numberLength;
     var hashLength = CircularCacheFile.hashLength;
     var payloadLength = metaData.length + data.length;
-    sys.puts(sig);
     var headerLength = 
         this.magic.length + // magic
         numberLength +      // header length
