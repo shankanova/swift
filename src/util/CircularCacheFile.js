@@ -8,19 +8,25 @@ function read(fd, buffer, offset, length, position, callback)
     var read = 0;
     var readCB = function(err, bytesRead)
         {
-            sys.puts("fs.read callback err=" + err + ", bytesRead=" + bytesRead);
+            // sys.puts("fs.read callback err=" + err + ", bytesRead=" + bytesRead);
             if (err) {
                 callback(err, read);
                 return;
             }
+            if (bytesRead == 0) {
+                callback("unexpected end of file", bytesRead);
+                return;
+            }
             read += bytesRead;
             if (read == length) {
-                 sys.puts("fs.read done, position=" + (position + read));
+                 // sys.puts("fs.read done, position=" + (position + read));
                  callback(null, read);
                  return;
             }
+            sys.puts("fs.read partial read=" + read);
             fs.read(fd, buffer, offset + read, length - read, position + read, readCB);
         };
+    // sys.puts("fs.read length=" + length + ", position=" + position);
     fs.read(fd, buffer, offset, length, position, readCB);
 }
 
@@ -70,19 +76,25 @@ function write(fd, buffer, offset, length, position, callback)
     var wrote = 0;
     var writeCB = function(err, written) 
         {
-            sys.puts("fs.write callback err=" + err + ", written=" + written);
+            // sys.puts("fs.write callback err=" + err + ", written=" + written);
             if (err) {
                 callback(err, wrote);
                 return;
             }
+            if (written == 0) {
+                callback("unexpected 0-length write", written);
+                return;
+            }
             wrote += written;
             if (wrote == length) {
-                sys.puts("fs.write done, position=" + (position + wrote));
+                // sys.puts("fs.write done, position=" + (position + wrote));
                 callback(null, wrote);
                 return;
             }
+            sys.puts("fs.write partial wrote=" + wrote);
             fs.write(fd, buffer, offset + wrote, length - wrote, position + wrote, writeCB);
         };
+    // sys.puts("fs.write length=" + length + ", position=" + position);
     fs.write(fd, buffer, offset, length, position, writeCB);
 }
 

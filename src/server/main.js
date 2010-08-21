@@ -13,7 +13,7 @@ function fill(buffer, s)
     }
 }
 
-function testCircularCacheFile(fileName, maxSize, numEntries, metaDataSize, dataSize)
+function testCircularCacheFile(fileName, maxSize, numEntries, metaDataSize, dataSize, callback)
 {
     var myCacheFile = new CircularCacheFile(fileName, maxSize, false);
     var offset = 0;
@@ -54,7 +54,7 @@ function testCircularCacheFile(fileName, maxSize, numEntries, metaDataSize, data
             var sig = crypto.createHash('md5').update(index).digest('binary');
             myCacheFile.getData(offsets[index], sig, function(err, metaData, data) 
                 {
-                     sys.puts("index=" + index + ", metaData=" + metaData + ", data=" + data);
+                     // sys.puts("index=" + index + ", err=" + err + ", metaData=" + metaData + ", data=" + data);
                      if (bytesRead + entrySize < maxSize) { 
                          if (err) {
                              callback(err);
@@ -85,26 +85,24 @@ function testCircularCacheFile(fileName, maxSize, numEntries, metaDataSize, data
                      getter(index - 1, callback);
                  });
         };
-    var done = function(err)
-        {
-            if (err) {
-                sys.puts("getter err=" + err);
-                return;
-            }
-            sys.puts("done");
-        };
-    
     putter(0, function(err) 
         { 
             if (err) {
                 sys.puts("putter err=" + err);
                 return;
             }
-            getter(numEntries - 1, done); 
+            getter(numEntries - 1, callback); 
         });
     
 }
 
 
-testCircularCacheFile('/tmp/CircularCacheFile', 1000, 4, 100, 200);
+testCircularCacheFile('/tmp/CircularCacheFile', 1000000, 10, 100, 200000, function(err) 
+   {
+        if (err) {
+            sys.puts("failed err=" + err);
+            return;
+        }
+        sys.puts("passed");
+   });
 
