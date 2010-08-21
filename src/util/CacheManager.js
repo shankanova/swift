@@ -37,6 +37,7 @@ CacheManager.prototype.put =
 	function(key, content) { 
 		console.log("CacheManager put called");
 		var userData = 0;
+        var that = this;
 		console.log("CacheFile put being called on " + this.circularCacheFile);
 		this.circularCacheFile.put(this.offset, key, "", content, 
 			function(error, newOffset) {
@@ -44,8 +45,8 @@ CacheManager.prototype.put =
 					console.log("Error in writing to cache file. " + error) 
 				}
 				else {
-					this.offset = newOffset;
-					this.cacheIndex.put(key, offset, userData);
+					that.offset = newOffset;
+					that.cacheIndex.put(key, that.offset, userData);
 					console.log("CacheIndex put worked!");
 				}
 			}
