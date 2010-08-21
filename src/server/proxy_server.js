@@ -1,11 +1,3 @@
-/*
-** Peteris Krumins (peter@catonmat.net)
-** http://www.catonmat.net  --  good coders code, great reuse
-**
-** A simple proxy server written in node.js.
-**
-*/
-
 var http = require('http');
 var sys  = require('sys');
 var fs   = require('fs');
@@ -76,18 +68,18 @@ http.createServer(function(request, response) {
     return;
   }
 
-  if (!host_allowed(request.url)) {
+/*  if (!host_allowed(request.url)) {
     msg = "Host " + request.url + " has been denied by proxy configuration";
     deny(response, msg);
     sys.log(msg);
     return;
   }
-
+*/
   sys.log(ip + ": " + request.method + " " + request.url);
   try {
   var proxy = http.createClient(80, request.headers['host']);
   var cacheKey = CacheUtils.computeCacheKey(request);
-  console.log("CacheKey = " + cacheKey + " , Url = " + request.url);
+  console.log("CacheKey = " + cacheKey.toString(16) + " , Url = " + request.url);
   cacheManager.get(cacheKey, 
 	function (found, metadata, body) {
 		  if (found) { 
@@ -96,17 +88,31 @@ http.createServer(function(request, response) {
 		  }
 		  else {
   		  var proxy_request = proxy.request(request.method, request.url, request.headers);
+		  var currentBufferCapacity = 1000000; // 10Kb ?
+		  var buffer = new Buffer(currentBufferCapacity);
+		  var contentLength = 0;
 		  proxy_request.addListener('response', function(proxy_response) {
 			proxy_response.addListener('data', function(chunk) {
-				try {
-						response.write(chunk, 'binary');
-					}
-				catch (err) {
-						response.end();
-					}
+						if ((contentLength + chunk.length) > currentBufferCapacity) 
+						{
+							while ((contentLength + chunk.length) > currentBufferCapacity)
+							{
+								// double the buffer
+								currentBufferCapacity = currentBufferCapacity * 2;
+								console.log("expanding the buffer to size " + currentBufferCapacity);
+							}
+							var tempBuffer = new Buffer(currentBufferCapacity);
+							buffer.copy(tempBuffer, 0, 0, contentLength);
+							buffer = tempBuffer; 
+						}
+							chunk.copy(buffer, contentLength, 0, chunk.length);
+							contentLength += chunk.length
+							response.write(chunk, 'binary');
+							//console.log('buffer length = ' + contentLength);
 			});
 			proxy_response.addListener('end', function() {
 			  response.end();
+			  cacheManager.put(cacheKey, buffer);
 			});
 			response.writeHead(proxy_response.statusCode, proxy_response.headers);
 		  });
@@ -133,5 +139,5 @@ update_blacklist();
 update_iplist();
 
 process.on('uncaughtException', function (err) {
-  console.log('Caught exception: ' + err);
+  console.log('Caught fatal exception: ' + err);
 });
