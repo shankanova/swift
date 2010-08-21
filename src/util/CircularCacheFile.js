@@ -1,10 +1,17 @@
 var sys = require('sys'),
-    fs = require('fs');
+    assert = require('assert'),
     crypto = require('crypto'),
+    fs = require('fs');
     BufferStream = require('../util/BufferStream');
    
 function read(fd, buffer, offset, length, position, callback) 
 {
+    assert.equal(typeof fd, 'number');
+    assert.ok(buffer instanceof Buffer);
+    assert.equal(typeof offset, 'number');
+    assert.equal(typeof length, 'number');
+    assert.equal(typeof position, 'number');
+
     var read = 0;
     var readCB = function(err, bytesRead)
         {
@@ -32,6 +39,10 @@ function read(fd, buffer, offset, length, position, callback)
 
 function getBuffer(fd, length, position, callback) 
 {
+    assert.equal(typeof fd, 'number');
+    assert.equal(typeof length, 'number');
+    assert.equal(typeof position, 'number');
+
     var buffer = new Buffer(length);
     read(fd, buffer, 0, length, position, function(err, bytesRead)
         {
@@ -41,6 +52,11 @@ function getBuffer(fd, length, position, callback)
 
 function getBufferWithWrap(fd, maxSize, length, position, callback)
 {
+    assert.equal(typeof fd, 'number');
+    assert.equal(typeof maxSize, 'number');
+    assert.equal(typeof length, 'number');
+    assert.equal(typeof position, 'number');
+
     if (length > maxSize) {
         callback("length > maxSize", null);
         return;
@@ -73,6 +89,12 @@ function getBufferWithWrap(fd, maxSize, length, position, callback)
 
 function write(fd, buffer, offset, length, position, callback)
 {
+    assert.equal(typeof fd, 'number');
+    assert.ok(buffer instanceof Buffer);
+    assert.equal(typeof offset, 'number');
+    assert.equal(typeof length, 'number');
+    assert.equal(typeof position, 'number');
+
     var wrote = 0;
     var writeCB = function(err, written) 
         {
@@ -100,6 +122,10 @@ function write(fd, buffer, offset, length, position, callback)
 
 function putBuffer(fd, buffer, position, callback)
 {
+    assert.equal(typeof fd, 'number');
+    assert.ok(buffer instanceof Buffer);
+    assert.equal(typeof position, 'number');
+
     write(fd, buffer, 0, buffer.length, position, function(err, written)
         {
              callback(err, err ? null : position + written);
@@ -108,6 +134,11 @@ function putBuffer(fd, buffer, position, callback)
 
 function putBufferWithWrap(fd, maxSize, buffer, position, callback)
 {
+    assert.equal(typeof fd, 'number');
+    assert.equal(typeof maxSize, 'number');
+    assert.ok(buffer instanceof Buffer);
+    assert.equal(typeof position, 'number');
+
     var length = buffer.length;
     if (length > maxSize) {
         callback("length > maxSize", null);
@@ -138,7 +169,10 @@ function putBufferWithWrap(fd, maxSize, buffer, position, callback)
     write(fd, buffer, firstLength, secondLength, 0, countDown);
 }
 
-function CircularCacheFile(fileName, maxSize, truncate) {
+function CircularCacheFile(fileName, maxSize, truncate) 
+{
+    assert.equal(typeof maxSize, 'number');
+
     var err = null;
     this.fileName = fileName;
     this.maxSize = maxSize;
@@ -155,6 +189,8 @@ CircularCacheFile.version = 1;
 
 CircularCacheFile.prototype.getHeaderLength = function(sig)
 {
+    assert.equal(typeof sig, 'string');
+
     var numberLength = BufferStream.numberLength;
     var hashLength = CircularCacheFile.hashLength;
     var magic = this.magic;
@@ -174,12 +210,19 @@ CircularCacheFile.prototype.getHeaderLength = function(sig)
 
 CircularCacheFile.prototype.getTrailerLength = function(sig)
 {
+    assert.equal(typeof sig, 'string');
+
     var numberLength = BufferStream.numberLength;
     return numberLength;
 }
 
 CircularCacheFile.prototype.put = function(position, sig, metaData, data, callback) 
 {
+    assert.ok(typeof position, 'number');
+    assert.equal(typeof sig, 'string');
+    assert.ok(metaData instanceof Buffer);
+    assert.ok(data instanceof Buffer);
+
     var headerLength = this.getHeaderLength(sig);
     var payloadLength = metaData.length + data.length;
     var trailerLength = this.getTrailerLength(sig);
@@ -206,7 +249,10 @@ CircularCacheFile.prototype.put = function(position, sig, metaData, data, callba
     putBufferWithWrap(this.fd, this.maxSize, buffer, position, callback);
 } 
 
-CircularCacheFile.prototype.getHeader = function(position, sig, callback) {
+CircularCacheFile.prototype.getHeader = function(position, sig, callback) 
+{
+    assert.equal(typeof position, 'number');
+    assert.equal(typeof sig, 'string');
 
     var magic = this.magic;
     var headerLength = this.getHeaderLength(sig);
@@ -264,6 +310,9 @@ CircularCacheFile.prototype.getHeader = function(position, sig, callback) {
     
 CircularCacheFile.prototype.getMetadata = function(position, sig, callback) 
 {
+    assert.equal(typeof position, 'number');
+    assert.equal(typeof sig, 'string');
+
     var fd = this.fd;
     var maxSize = this.maxSize;
     this.getHeader(position, sig, function(err, header) 
@@ -290,6 +339,9 @@ CircularCacheFile.prototype.getMetadata = function(position, sig, callback)
 
 CircularCacheFile.prototype.getData = function(position, sig, callback) 
 {
+    assert.equal(typeof position, 'number');
+    assert.equal(typeof sig, 'string');
+
     var fd = this.fd;
     var maxSize = this.maxSize;
     this.getHeader(position, sig, function(err, header) 
