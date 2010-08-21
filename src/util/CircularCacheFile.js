@@ -77,7 +77,7 @@ function write(fd, buffer, offset, length, position, callback)
             }
             wrote += written;
             if (wrote == length) {
-                sys.puts("write done, position=" + (position + wrote));
+                sys.puts("fs.write done, position=" + (position + wrote));
                 callback(null, wrote);
                 return;
             }
