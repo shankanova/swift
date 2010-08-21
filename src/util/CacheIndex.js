@@ -71,28 +71,47 @@ var fillBuffer = function(buffer, position,  key,offset,userData)
 function CacheIndex(directory, maxSize)
 {
     this.directory = directory;
+    this._cacheFileName = path.join(this.directory, 'cache.idx');
     this.maxSize = maxSize || kDefaultMax;
     this._buffer = new Buffer(this.maxSize * 32);
-    console.log('buffer size is ' + this._buffer.length);
+    //console.log('buffer size is ' + this._buffer.length);
 }
 
 CacheIndex.prototype.load = 
     function(callback) {
-        var fileName = path.join(this.directory, 'cache.idx');
+        fs.stat(this._cacheFileName, function (err, stats) {
+            console.log(sys.inspect(stats));
+        });
 //        sys.puts(sys.inspect(this));
 //        callback(fileName);
     } 
 
-CacheIndex.prototype.persist = function(callback) {
-    
+CacheIndex.prototype.persist = function(callback) 
+{
+    var buffer = this._buffer;
+    fs.open(this._cacheFileName, 'w+', 0666, function (err, fd) {
+        if (!err) {
+            fs.writeSync(fd, buffer, 0, buffer.length, 0);
+            fs.closeSync(fd);
+        }
+        callback && callback(err);
+    });
 }
 
-CacheIndex.prototype.reset = function() {
-    this._index = {};
+CacheIndex.prototype.reset = function()
+{
+    fs.stat(this._cacheFileName, function (err) {
+        if (!err)
+            fs.unlinkSync(this._cacheFileName);
+    });
+    this._buffer = new Buffer(this.maxSize * 32);
 }
-
 
 CacheIndex.prototype.get = function(key) {
+
+    if (key === null)
+        return { offset: this._specialOffset }
+        
     if (is_a_16char_string(key)) {
         var bucket = hashKey(key) % this.maxSize;
         var bufPos = bucket * 32;
@@ -112,6 +131,11 @@ CacheIndex.prototype.get = function(key) {
 CacheIndex.prototype.put = function(key, offset, userData) {
 //    sys.puts(sys.inspect(arguments));
 
+    if (key === null) {
+        this._specialOffset = offset;
+        return;
+    }
+        
     userData = userData || 0;
     
     var bucket = hashKey(key) % this.maxSize;
