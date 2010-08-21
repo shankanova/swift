@@ -4,6 +4,23 @@ var sys = require('sys'),
     fs = require('fs');
     BufferStream = require('../util/BufferStream');
    
+Buffer.prototype.equals = function(other)
+{
+    assert.ok(other instanceof Buffer);
+    if (this.length != other.length) 
+    {
+        return false;
+    }
+    for (var i = 0; i < this.length; ++i) 
+    {
+        if (this[i] != other[i]) 
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 function read(fd, buffer, offset, length, position, callback) 
 {
     assert.equal(typeof fd, 'number');
@@ -383,7 +400,8 @@ CircularCacheFile.prototype.get = function(position, sig, callback)
                         return;
                     }
                     var trailerBuffer = buffer.slice(header.metaDataLength + header.dataLength, bufferLength);
-                    if (headerBuffer.toString('binary') != trailerBuffer.toString('binary')) {
+                    if (!headerBuffer.equals(trailerBuffer)) 
+                    {
                         callback("Trailer is incorrect", null, null);
                         return;
                     }

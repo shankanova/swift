@@ -64,7 +64,7 @@ function testCircularCacheFile(fileName, maxSize, numEntries, metaDataSize, data
                          fill(expectedMetaData, "metadata" + index);
                          var expectedData = new Buffer(dataSize);
                          fill(expectedData, "data" + index);
-                         if (expectedMetaData.toString() != metaData.toString()) {
+                         if (!expectedMetaData.equals(metaData)) {
                              sys.puts("expectedMetaData=" + expectedMetaData + ", metaData=" + metaData);
                              callback("expectedMetaData != metaData");
                              return;
