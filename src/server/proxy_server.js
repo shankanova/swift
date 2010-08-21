@@ -150,8 +150,6 @@ sys.puts(sys.inspect(meta));
 update_blacklist();
 update_iplist();
 
-sys.puts(sys.inspect(JSON));
-
 /*
 process.on('uncaughtException', function (err) {
   console.log('Caught fatal exception: ' + err);
