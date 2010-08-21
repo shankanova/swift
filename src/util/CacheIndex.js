@@ -37,7 +37,20 @@ var readUInt64 = function(buffer,offset)
 
 //--------------------------------------------------------------------------------
 
-var fillBuffer = function(buffer, key,offset,userData)
+var hashKey = function(key, numBuckets) 
+{
+    var hashKey = 0;
+    for (var i = key.length - 1; i >= 0 ; i--) {
+        hashKey = hashKey * 3723 + key.charCodeAt(i);
+        hashKey = hashKey % 75987345873490234;
+    }
+    
+    return hashKey;
+}
+
+//--------------------------------------------------------------------------------
+
+var fillBuffer = function(buffer, position,  key,offset,userData)
 {
     if (!is_a_16char_string(key))
         throw 'key must be a 16 character string';
@@ -48,9 +61,9 @@ var fillBuffer = function(buffer, key,offset,userData)
      if (!is_a_pos64bits_number(userData))
         throw 'userData must be a positive 64 bits number';
 
-    buffer.write(key,0,'binary');
-    writeUInt64(buffer,16,offset);
-    writeUInt64(buffer,24,userData);
+    buffer.write(key,position,'binary');
+    writeUInt64(buffer,position + 16,offset);
+    writeUInt64(buffer,position + 24,userData);
 
     return buffer;
 }
@@ -59,8 +72,8 @@ function CacheIndex(directory, maxSize)
 {
     this.directory = directory;
     this.maxSize = maxSize || kDefaultMax;
-    this._index = {};
-    this._numEntries = 0;
+    this._buffer = new Buffer(this.maxSize * 32);
+    console.log('buffer size is ' + this._buffer.length);
 }
 
 CacheIndex.prototype.load = 
@@ -80,8 +93,20 @@ CacheIndex.prototype.reset = function() {
 
 
 CacheIndex.prototype.get = function(key) {
-    if (is_a_16char_string(key))
-        return this._index[key];
+    if (is_a_16char_string(key)) {
+        var bucket = hashKey(key) % this.maxSize;
+        var bufPos = bucket * 32;
+        var buffer = this._buffer;
+        
+    //sys.puts(sys.inspect(buffer.slice(bufPos,bufPos + 32)));
+         var bufferedKey = buffer.toString('binary',bufPos,bufPos+16);
+        //console.log('key = ' + key + ' bufKey = ' + bufferedKey);
+        if (key == bufferedKey) {
+            var offset = readUInt64(buffer,bufPos + 16);
+            var userData = readUInt64(buffer,bufPos + 24);
+            return { offset: offset , userData: userData };
+        }
+    }
 }
 
 CacheIndex.prototype.put = function(key, offset, userData) {
@@ -89,12 +114,12 @@ CacheIndex.prototype.put = function(key, offset, userData) {
 
     userData = userData || 0;
     
-    
-    var buffer = new Buffer(32);
-    fillBuffer(buffer,key,offset,userData);
-    //sys.puts(sys.inspect(buffer));
-
-    this._index[key] = { offset: offset, userData: userData }
+    var bucket = hashKey(key) % this.maxSize;
+    //console.log("key = " + key + ", bucket = " + bucket);
+    var bufPos = bucket * 32;
+    var buffer = this._buffer;
+    fillBuffer(buffer,bufPos,key,offset,userData);
+    //sys.puts(sys.inspect(buffer.slice(bufPos,bufPos + 32)));
 }
 
 module.exports = CacheIndex
