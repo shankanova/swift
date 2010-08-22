@@ -99,83 +99,98 @@ http.createServer(function(request, response) {
     return;
   }
 
-/*  if (!host_allowed(request.url)) {
+/* 
+  if (!host_allowed(request.url)) {
     msg = "Host " + request.url + " has been denied by proxy configuration";
     deny(response, msg);
     sys.log(msg);
     return;
   }
 */
-  sys.log(ip + ": " + request.method + " " + request.url);
+
+  sys.log(ip + ": " + request.method + " " + request.url); 
+  sys.puts(sys.inspect(request.headers));
   try {
-  var proxy = http.createClient(80, request.headers['host']);
-  var cacheKey = CacheUtils.computeCacheKey(request);
-  console.log("CacheKey = " + cacheKey.toHex() + " , Url = " + request.url);
-  cacheManager.get(cacheKey, 
-	function (found, metadata, body) {
-		  if (found) { 
-      var meta = JSON.parse(metadata.toString('utf8'));
-      // sys.puts(sys.inspect(meta));
-      response.writeHead(meta.statusCode, meta.header);
-			response.write(body, 'binary');
-			response.end();
-		  }
-		  else {
-  		  var proxy_request = proxy.request(request.method, request.url, request.headers);
-		  var currentBufferCapacity = 1000000; // 1MB ?
-		  var buffer = new Buffer(currentBufferCapacity);
-		  var contentLength = 0;
-		  proxy_request.addListener('response', function(proxy_response) {
-			proxy_response.addListener('data', function(chunk) {
-						if ((contentLength + chunk.length) > currentBufferCapacity) 
-						{
-							while ((contentLength + chunk.length) > currentBufferCapacity)
-							{
-								// double the buffer
-								currentBufferCapacity = currentBufferCapacity * 2;
-								console.log("expanding the buffer to size " + currentBufferCapacity);
-							}
-							var tempBuffer = new Buffer(currentBufferCapacity);
-							buffer.copy(tempBuffer, 0, 0, contentLength);
-							buffer = tempBuffer; 
-						}
-							chunk.copy(buffer, contentLength, 0, chunk.length);
-							contentLength += chunk.length
-							response.write(chunk, 'binary');
-							//console.log('buffer length = ' + contentLength);
-			});
-			proxy_response.addListener('end', function() {
-        var meta = { 
-            'statusCode' : proxy_response.statusCode,
-            'header' : proxy_response.headers
-        }; 
+    if (request.method != 'GET') {
+      sys.log('unsupported method ' + request.method);
+      response.writeHead(500);
+      response.end();
+      return;
+    }
+    var host = request.headers['host'];
+    var port = 80;
+    var colonPos = host.lastIndexOf(':');
+    if (colonPos >= 0) {
+      port = host.slice(colonPos + 1, host.length);
+      host = host.substr(0, colonPos);
+      sys.puts('host=' + host + ", port=" + port);
+    }
+    var proxy = http.createClient(port, host);
+    var cacheKey = CacheUtils.computeCacheKey(request);
+    console.log("CacheKey = " + cacheKey.toHex() + ", Url = " + request.url);
+    cacheManager.get(cacheKey, function(found, metadata, body) {
+	    if (found) { 
+        var meta = JSON.parse(metadata.toString('utf8'));
+        // sys.puts(sys.inspect(meta));
+        response.writeHead(meta.statusCode, meta.header);
+			  response.write(body, 'binary');
 			  response.end();
-        var expires = expirationTime(meta.header);
-        if (expires > 0) {
-          // sys.puts(sys.inspect(request.headers));
-          // sys.puts(sys.inspect(meta));
-          var metaJSON = JSON.stringify(meta);
-			    cacheManager.put(cacheKey, expires, new Buffer(metaJSON, 'utf8'), buffer.slice(0, contentLength));
-        }
-			});
-			response.writeHead(proxy_response.statusCode, proxy_response.headers);
-		  });
-		  request.addListener('data', function(chunk) {
-				try {
-					proxy_request.write(chunk, 'binary');
-				}
-				catch (err) {
-					console.log(err);
-				}
-		  });
-		  request.addListener('end', function() {
-			proxy_request.end();
-		  });
-	  }
-	});
+	  	}
+	    else {
+  	    var proxy_request = proxy.request(request.method, request.url, request.headers);
+		    var currentBufferCapacity = 1000000; // 1MB ?
+		    var buffer = new Buffer(currentBufferCapacity);
+		    var contentLength = 0;
+		    proxy_request.addListener('response', function(proxy_response) {
+  		  	proxy_response.addListener('data', function(chunk) {
+  		  		if ((contentLength + chunk.length) > currentBufferCapacity) 
+  		  		{
+  		  			while ((contentLength + chunk.length) > currentBufferCapacity)
+  		  			{
+  		  				// double the buffer
+  		  				currentBufferCapacity = currentBufferCapacity * 2;
+  			  			console.log("expanding the buffer to size " + currentBufferCapacity);
+  			  		}
+  			  		var tempBuffer = new Buffer(currentBufferCapacity);
+  			  		buffer.copy(tempBuffer, 0, 0, contentLength);
+  			  		buffer = tempBuffer; 
+  			  	}
+  			  	chunk.copy(buffer, contentLength, 0, chunk.length);
+  			  	contentLength += chunk.length
+  			   	response.write(chunk, 'binary');
+  				  //console.log('buffer length = ' + contentLength);
+  			  });
+  			  proxy_response.addListener('end', function() {
+            var meta = { 
+              'statusCode' : proxy_response.statusCode,
+              'header' : proxy_response.headers
+            }; 
+			      response.end();
+            var expires = expirationTime(meta.header);
+            if (expires > 0) {
+              // sys.puts(sys.inspect(meta));
+              var metaJSON = JSON.stringify(meta);
+			        cacheManager.put(cacheKey, expires, new Buffer(metaJSON, 'utf8'), buffer.slice(0, contentLength));
+            }
+			    });
+			    response.writeHead(proxy_response.statusCode, proxy_response.headers);
+	      });
+	      request.addListener('data', function(chunk) {
+          try {
+		        proxy_request.write(chunk, 'binary');
+	        } 
+          catch (err) { 
+            console.log(err); 
+          }
+        });
+		    request.addListener('end', function() {
+		    	proxy_request.end();
+		    });
+	    }
+	  });
   }
   catch (err) {
-	console.log("Caught exception : " + err);
+	  console.log("Caught exception : " + err);
   }
 }).listen(8080);
 
@@ -183,5 +198,5 @@ update_blacklist();
 update_iplist();
 
 process.on('uncaughtException', function (err) {
-  console.log('Caught fatal exception: ' + err);
+  console.log('Caught fatal exception: ' + err.stack);
 });
