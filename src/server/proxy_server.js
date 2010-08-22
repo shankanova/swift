@@ -61,6 +61,35 @@ function deny(response, msg) {
 
 var cacheManager = new CacheManager();
 
+String.prototype.toHex = function()
+{
+  var map = '0123456789ABCDEF';
+  var s = '';
+  for (var i = 0; i < this.length; i++)
+  {
+    var c = this.charCodeAt(i);
+    var hi = Math.floor(c / 16);
+    var lo = c % 16;
+    s += map.charAt(hi);
+    s += map.charAt(lo);
+  }
+  return s;
+}
+
+function expirationTime(responseHeader) {
+  var cacheControl = responseHeader['cache-control'];
+  var expire = 0;
+  if (cacheControl != undefined) {
+    var regex = /max-age=(\d+)/;
+    var matches = regex.exec(cacheControl)
+    var maxAge = (matches != null &&  matches.length >= 2) ? matches[1] : 0;
+    if (maxAge > 0) {
+       expire = (new Date()).valueOf() + (maxAge * 1000);
+    } 
+  }
+  return expire;
+}
+
 http.createServer(function(request, response) {
   var ip = request.connection.remoteAddress;
   if (!ip_allowed(ip)) {
@@ -78,16 +107,15 @@ http.createServer(function(request, response) {
   }
 */
   sys.log(ip + ": " + request.method + " " + request.url);
-sys.puts(sys.inspect(request.headers));
   try {
   var proxy = http.createClient(80, request.headers['host']);
   var cacheKey = CacheUtils.computeCacheKey(request);
-  console.log("CacheKey = " + cacheKey.toString(16) + " , Url = " + request.url);
+  console.log("CacheKey = " + cacheKey.toHex() + " , Url = " + request.url);
   cacheManager.get(cacheKey, 
 	function (found, metadata, body) {
 		  if (found) { 
       var meta = JSON.parse(metadata.toString('utf8'));
-sys.puts(sys.inspect(meta));
+      // sys.puts(sys.inspect(meta));
       response.writeHead(meta.statusCode, meta.header);
 			response.write(body, 'binary');
 			response.end();
@@ -121,10 +149,14 @@ sys.puts(sys.inspect(meta));
             'statusCode' : proxy_response.statusCode,
             'header' : proxy_response.headers
         }; 
-sys.puts(sys.inspect(meta));
-        var metaJSON = JSON.stringify(meta);
 			  response.end();
-			  cacheManager.put(cacheKey, new Buffer(metaJSON, 'utf8'), buffer.slice(0, contentLength));
+        var expires = expirationTime(meta.header);
+        if (expires > 0) {
+          // sys.puts(sys.inspect(request.headers));
+          // sys.puts(sys.inspect(meta));
+          var metaJSON = JSON.stringify(meta);
+			    cacheManager.put(cacheKey, expires, new Buffer(metaJSON, 'utf8'), buffer.slice(0, contentLength));
+        }
 			});
 			response.writeHead(proxy_response.statusCode, proxy_response.headers);
 		  });
@@ -150,8 +182,6 @@ sys.puts(sys.inspect(meta));
 update_blacklist();
 update_iplist();
 
-/*
 process.on('uncaughtException', function (err) {
   console.log('Caught fatal exception: ' + err);
 });
-*/

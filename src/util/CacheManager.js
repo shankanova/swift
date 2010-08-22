@@ -12,7 +12,14 @@ function CacheManager() {
 CacheManager.prototype.get = 
 	function(id, callback) {
 		var offset_map = this.cacheIndex.get(id);
-		if (offset_map && offset_map.offset>=0) {
+		if (offset_map && offset_map.offset >= 0) {
+      var expires = offset_map.userData;
+      var now = (new Date()).valueOf();
+      if (expires <= now) {
+        console.log("Cache entry expired " + ((now - expires) / 1000) + ' seconds ago');
+        callback(false, null, null);
+        return;
+      }
 			console.log("Cache index offset is " + offset_map.offset);
 			this.circularCacheFile.get(offset_map.offset, id,
 				function(error, metadata, body) {
@@ -35,19 +42,17 @@ CacheManager.prototype.get =
 	}
 
 CacheManager.prototype.put = 
-	function(key, metadata, body) {
+	function(key, expires, metadata, body) {
 		console.log("CacheManager put called");
-		var userData = 0;
     var that = this;
-		console.log("CacheFile put being called on " + this.circularCacheFile);
+		console.log("CacheFile put being called");
 		this.circularCacheFile.put(this.offset, key, metadata, body, 
 			function(error, newOffset) {
 				if (error) { 
 					console.log("Error in writing to cache file. " + error) 
 				}
 				else {
-sys.puts("put offset=" + that.offset);
-					that.cacheIndex.put(key, that.offset, userData);
+					that.cacheIndex.put(key, that.offset, expires);
 					that.offset = newOffset;
 					console.log("CacheIndex put worked!");
 				}
