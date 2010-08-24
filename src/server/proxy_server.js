@@ -95,7 +95,86 @@ function expirationTime(responseHeader) {
   return expire;
 }
 
-http.createServer(function(request, response) {
+
+function inferHostAndPort(request) {
+    var host = request.headers['host'];
+    var port = 80;
+    var colonPos = host.lastIndexOf(':');
+    if (colonPos >= 0) {
+      port = host.slice(colonPos + 1, host.length);
+      host = host.substr(0, colonPos);
+      sys.puts('host=' + host + ", port=" + port);
+    }
+    return {host: host, port: port};
+}
+
+function proxyRequest(request, response, cachingEnabled, cacheKey) { 
+    var hostPort = inferHostAndPort(request);
+    var port = hostPort.port;
+    var host = hostPort.host;
+    var proxy = http.createClient(port, host);
+         var proxy_request = proxy.request(request.method, request.url, request.headers);
+        var currentBufferCapacity = 1000000; // 1MB ?
+        var buffer = new Buffer(currentBufferCapacity);
+        var contentLength = 0;
+        proxy_request.addListener('response', 
+          function(proxy_response) {
+            proxy_response.addListener('data', 
+              function(chunk) {
+                if ((contentLength + chunk.length) > currentBufferCapacity) 
+                {
+                  while ((contentLength + chunk.length) > currentBufferCapacity)
+                  {
+                    // double the buffer
+                    currentBufferCapacity = currentBufferCapacity * 2;
+                    console.log("expanding the buffer to size " + currentBufferCapacity);
+                  }
+                  var tempBuffer = new Buffer(currentBufferCapacity);
+                  buffer.copy(tempBuffer, 0, 0, contentLength);
+                  buffer = tempBuffer; 
+                }
+                chunk.copy(buffer, contentLength, 0, chunk.length);
+                contentLength += chunk.length
+                response.write(chunk, 'binary');
+                //console.log('buffer length = ' + contentLength);
+              });
+          
+            proxy_response.addListener('end', 
+              function() {
+                var meta = { 
+                  'statusCode' : proxy_response.statusCode,
+                  'header' : proxy_response.headers
+                }; 
+                response.end();
+                if (cachingEnabled) { 
+                  var expires = expirationTime(meta.header);
+                  if (expires > 0) {
+                    // sys.puts(sys.inspect(meta));
+                    var metaJSON = JSON.stringify(meta);
+                    cacheManager.put(cacheKey, expires, new Buffer(metaJSON, 'utf8'), buffer.slice(0, contentLength));
+                  }
+                }
+              });
+            
+            response.writeHead(proxy_response.statusCode, proxy_response.headers);
+          
+        });
+        
+        request.addListener('data', 
+          function(chunk) {
+            try {
+              proxy_request.write(chunk, 'binary');
+            } 
+            catch (err) { 
+              console.log(err); 
+            }
+          });
+        request.addListener('end', function() {
+          proxy_request.end();
+        });
+ }
+
+ http.createServer(function(request, response) {
   var ip = request.connection.remoteAddress;
   if (!ip_allowed(ip)) {
     msg = "IP " + ip + " is not allowed to use this proxy";
@@ -116,86 +195,37 @@ http.createServer(function(request, response) {
   sys.log(ip + ": " + request.method + " " + request.url); 
   sys.puts(sys.inspect(request.headers));
   try {
-    if (request.method != 'GET') {
-      sys.log('unsupported method ' + request.method);
-      response.writeHead(500);
-      response.end();
-      return;
+    var cachingEnabled = false;
+    // We only cache GET requests, but will proxy all requests
+    if (request.method == 'GET') {
+      cachingEnabled = true;
     }
-    var host = request.headers['host'];
-    var port = 80;
-    var colonPos = host.lastIndexOf(':');
-    if (colonPos >= 0) {
-      port = host.slice(colonPos + 1, host.length);
-      host = host.substr(0, colonPos);
-      sys.puts('host=' + host + ", port=" + port);
-    }
-    var proxy = http.createClient(port, host);
-    var cacheKey = CacheUtils.computeCacheKey(request);
+
+   var cacheKey = CacheUtils.computeCacheKey(request);
     console.log("CacheKey = " + cacheKey.toHex() + ", Url = " + request.url);
+    if (cachingEnabled) 
+    { 
     cacheManager.get(cacheKey, function(found, metadata, body) {
-	    if (found) { 
+      if (found) { 
         var meta = JSON.parse(metadata.toString('utf8'));
         // sys.puts(sys.inspect(meta));
         response.writeHead(meta.statusCode, meta.header);
-			  response.write(body, 'binary');
-			  response.end();
-	  	}
-	    else {
-  	    var proxy_request = proxy.request(request.method, request.url, request.headers);
-		    var currentBufferCapacity = 1000000; // 1MB ?
-		    var buffer = new Buffer(currentBufferCapacity);
-		    var contentLength = 0;
-		    proxy_request.addListener('response', function(proxy_response) {
-  		  	proxy_response.addListener('data', function(chunk) {
-  		  		if ((contentLength + chunk.length) > currentBufferCapacity) 
-  		  		{
-  		  			while ((contentLength + chunk.length) > currentBufferCapacity)
-  		  			{
-  		  				// double the buffer
-  		  				currentBufferCapacity = currentBufferCapacity * 2;
-  			  			console.log("expanding the buffer to size " + currentBufferCapacity);
-  			  		}
-  			  		var tempBuffer = new Buffer(currentBufferCapacity);
-  			  		buffer.copy(tempBuffer, 0, 0, contentLength);
-  			  		buffer = tempBuffer; 
-  			  	}
-  			  	chunk.copy(buffer, contentLength, 0, chunk.length);
-  			  	contentLength += chunk.length
-  			   	response.write(chunk, 'binary');
-  				  //console.log('buffer length = ' + contentLength);
-  			  });
-  			  proxy_response.addListener('end', function() {
-            var meta = { 
-              'statusCode' : proxy_response.statusCode,
-              'header' : proxy_response.headers
-            }; 
-			      response.end();
-            var expires = expirationTime(meta.header);
-            if (expires > 0) {
-              // sys.puts(sys.inspect(meta));
-              var metaJSON = JSON.stringify(meta);
-			        cacheManager.put(cacheKey, expires, new Buffer(metaJSON, 'utf8'), buffer.slice(0, contentLength));
-            }
-			    });
-			    response.writeHead(proxy_response.statusCode, proxy_response.headers);
-	      });
-	      request.addListener('data', function(chunk) {
-          try {
-		        proxy_request.write(chunk, 'binary');
-	        } 
-          catch (err) { 
-            console.log(err); 
-          }
-        });
-		    request.addListener('end', function() {
-		    	proxy_request.end();
-		    });
-	    }
-	  });
-  }
+        response.write(body, 'binary');
+        response.end();
+      }
+      else {
+        proxyRequest(request, response, cachingEnabled, cacheKey);
+      }
+    });
+    }
+    else 
+    {
+      // Not cacheable but we still proxy it through
+      proxyRequest(request, response, cachingEnabled, cacheKey);
+    }
+ }
   catch (err) {
-	  console.log("Caught exception : " + err);
+    console.log("Caught exception : " + err.stack);
   }
 }).listen(8080);
 
@@ -205,3 +235,5 @@ update_iplist();
 process.on('uncaughtException', function (err) {
   console.log('Caught fatal exception: ' + err.stack);
 });
+
+
