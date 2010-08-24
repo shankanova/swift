@@ -78,15 +78,20 @@ String.prototype.toHex = function()
 
 function expirationTime(responseHeader) {
   var cacheControl = responseHeader['cache-control'];
-  var expire = 0;
+  var ttlSecs = 0;
   if (cacheControl != undefined) {
     var regex = /max-age=(\d+)/;
     var matches = regex.exec(cacheControl)
     var maxAge = (matches != null &&  matches.length >= 2) ? matches[1] : 0;
     if (maxAge > 0) {
-       expire = (new Date()).valueOf() + (maxAge * 1000);
+      ttlSecs = maxAge; 
     } 
   }
+  else {
+    // no cache control
+    ttlSecs = 60;
+  }
+  var expire = (new Date()).valueOf() + (ttlSecs * 1000);
   return expire;
 }
 
